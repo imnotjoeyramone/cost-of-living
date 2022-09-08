@@ -1,0 +1,295 @@
+---
+title: "Cost of Living - Energy Price Increase Analysis Project"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+library(tidyverse)
+library(readxl)
+setwd("C:/Users/AT333597/My Drive/Data Science/Data Science Graduate Programme/mod-10 - Data Science for Policy/Cost of Living analysis")
+```
+
+## Background
+
+In February 2022, ONS released a series of analyses which outlined the rising cost of living in the UK, with particular focus on the [increasing cost of energy][1]. According to these analyses, lower income households are disproportionately affected by rising energy costs.
+
+### Cost of gas
+
+In particular, [growing demand for gas imports to meet post-lockdown demand][2] has seen increased costs passed on to the consumer. The System Average Price (SAP) of gas tracks the unit cost of gas traded daily in the UK.
+
+[1]: <https://www.ons.gov.uk/economy/inflationandpriceindices/articles/energypricesandtheireffectonhouseholds/2022-02-01>
+
+[2]: <https://assets.publishing.service.gov.uk/government/uploads/system/uploads/attachment_data/file/1094421/DUKES_2022_Chapter_4.pdf>
+
+```{r, echo=FALSE}
+
+sap <- 
+  read_xlsx("systemaveragepriceofgasdataset010922.xlsx", sheet = 2, skip = 1)[1:1701,1:3]
+colnames(sap) <- c("date_from", "price", "avg_7_day")
+
+sap <- sap %>%
+  mutate(month = factor(format(date_from, "%B"), 
+                        levels = c("January", "February", "March", "April", "May", "June", "July","August", "September", "October", "November", "December")),
+         year = format(date_from, "%Y"))
+
+ggplot(data = sap %>% filter(date_from > '2020-01-01') , aes(x= date_from, y = avg_7_day))+
+  geom_line()+
+  ggtitle("System Average Price (SAP) of Gas since 2020")+
+  xlab("Date")+
+  ylab("SAP of Gas (p/kWh)")+
+  labs(caption = "Source: ONS System Average Price of Gas September 2022")
+```
+
+Summarising this data per month highlights seasonal trends. In the years 2018-2020, SAP remaining reasonably conistent throughout the year, with marginally lower average prices seen in the spring and summer months (April - September) than in autumn and winter (October - March). With the exception of early March 2018, the standard deviations for months in this 3 year were minimal, showing that gas prices did not fluctuate much day-to-day.
+
+This changed around June 2021 - mean gas prices steadily started to rise, and so too the standard deviation month-to-month, showing greater daily fluctuations. The latest data available shows that the average SAP in August 2022 was 10.13 p/kWh, with a standard deviation of 3.17. 
+
+```{r, echo = FALSE}
+sap_summary <- sap %>%
+  group_by(month, year) %>%
+  summarize(mean = mean(price),
+            sd = sd(price))
+
+ggplot(data = sap_summary, aes(x = month, y = mean, colour = year, group = year))+
+  geom_line()+
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))+
+  ggtitle("Monthly mean SAP 2018-2022")+
+  xlab("")+
+  ylab("Mean SAP (p/kWh)")+
+  geom_linerange(aes(ymin=mean-sd, ymax=mean+sd))+
+  labs(caption = "Vertical lines represent standard deviation in each month. \n Source: ONS System Average Price of Gas September 2022")
+```
+
+Should this trend continue, which looks to be likely given further price cap increases in October 2022, given the expected rises in the autumn and winter prices in any other year, prices could be high and subject to more extreme fluctuations into 2023. Therefore, understanding how energy prices impact household income is increasingly important for policymakers. 
+
+## Impact on low income households
+
+This analysis aims to evaluate ONS' assertion that lower income households are more impacted by cost of living rises. It will also assess the relationships between energy and other household expenditure, such as rent. 
+
+### Methodology
+
+Data from the [2021 Family Spending Workbook][3] was used to produce this analysis. Suplementary data was taken from the 2020 and 2019 versions of this workbook.
+
+Further data was taken from the [July 2022 Opinions and Lifestyles survey.][6].
+
+After some basic data cleansing in Excel, RStudio was used to manipulate, analyse and visualise the data and to produce this final report.
+
+[3]: <https://www.ons.gov.uk/peoplepopulationandcommunity/personalandhouseholdfinances/expenditure/datasets/familyspendingworkbook1detailedexpenditureandtrends>
+
+[6]: <https://www.ons.gov.uk/peoplepopulationandcommunity/personalandhouseholdfinances/expenditure/datasets/impactofincreasedcostoflivingonadultsacrossgreatbritain>
+
+### Results
+
+As shown below, it is clear that the proportion of gross household income spent on energy is not equal across income percentiles. For all energy types, the lowest income decile spends a greater proportion of monthly household income on energy, with 7.9% spent per month - on the other end of the scale, the highest income decile spends 3.3% of monthly income on energy. 
+
+```{r, echo=FALSE}
+expenditure <- read_xlsx("coicop_A6_cleaned.xlsx", sheet = "expenditure")
+income <- read_xlsx("coicop_A6_cleaned.xlsx", sheet = "income")
+expenditure_pct <- read_xlsx("coicop_A6_cleaned.xlsx", sheet = "expenditure_pct")
+
+energy_pct <- expenditure_pct %>% 
+  filter(substr(COPI, 1,3) == "4.4")%>%
+  select(-COPI) %>%
+  pivot_longer(cols = 2:12, names_to = "decile", values_to = "percent")%>%
+  mutate(percent = as.numeric(percent),
+         decile = factor(decile, levels = c("All_household", "Lowest_10", "Second_10", "Third_10", "Fourth_10", "Fifth_10", "Sixth_10", "Seventh_10", "Eighth_10", "Ninth_10", "Highest_10")),
+         Commodity = factor(Commodity, levels = c("Electricity, gas and other fuels", "Electricity", "Gas", "Other fuels")))
+
+ggplot(energy_pct, aes(x = decile, y = percent))+
+  geom_col()+
+  facet_grid(~Commodity)+
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))+
+  xlab("")+
+  ylab("% of household income spent each month")+
+  labs(caption = "Source: ONS Family Spending Workbook 1 - detailed expenditure and trends (table 3.2E)")
+```
+
+#### Comparison to previous years
+
+Comparison to previous years' expenditure as reported by ONS gives an insight into the potential changes over time. Expenditure data is only reported up to December 2021, so the further price rises seen in the first half of 2022 will not be shown here - it would be pertinent to repeat this analysis once this becomes available. 
+
+The below graph shows the proportion of household income spent for each income decile in the years 2019-2021. With the exception of the 2^nd^ income decile, percentage expenditure has increased for all groups.
+
+```{r, echo=FALSE}
+expenditure_pct_2020 <- read_xlsx("coicop_A6_cleaned.xlsx", sheet = "expenditure_pct_2020")
+
+energy_pct_2020 <- expenditure_pct_2020 %>% 
+  filter(substr(COPI, 1,3) == "4.4")%>%
+  select(-COPI) %>%
+  pivot_longer(cols = 2:12, names_to = "decile", values_to = "percent")%>%
+  mutate(percent = as.numeric(percent),
+         decile = factor(decile, levels = c("All_household", "Lowest_10", "Second_10", "Third_10", "Fourth_10", "Fifth_10", "Sixth_10", "Seventh_10", "Eighth_10", "Ninth_10", "Highest_10")),
+         Commodity = factor(Commodity, levels = c("Electricity, gas and other fuels", "Electricity", "Gas", "Other fuels")))
+
+expenditure_pct_2019 <- read_xlsx("coicop_A6_cleaned.xlsx", sheet = "expenditure_pct_2019")
+
+energy_pct_2019 <- expenditure_pct_2019 %>% 
+  filter(substr(COPI, 1,3) == "4.4")%>%
+  select(-COPI) %>%
+  pivot_longer(cols = 2:12, names_to = "decile", values_to = "percent")%>%
+  mutate(percent = as.numeric(percent),
+         decile = factor(decile, levels = c("All_household", "Lowest_10", "Second_10", "Third_10", "Fourth_10", "Fifth_10", "Sixth_10", "Seventh_10", "Eighth_10", "Ninth_10", "Highest_10")),
+         Commodity = factor(Commodity, levels = c("Electricity, gas and other fuels", "Electricity", "Gas", "Other fuels")))
+
+energy_pct$year <- "2021"
+energy_pct_2020$year <- "2020"
+energy_pct_2019$year <- "2019"
+
+energy_3_yr <- rbind(energy_pct, energy_pct_2020, energy_pct_2019) %>%
+  filter(Commodity == "Electricity, gas and other fuels" & decile != "All_household")
+
+ggplot(data = energy_3_yr, aes(x=decile, y = percent, colour = year, group = year))+
+  geom_line()+
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))+
+  xlab("")+
+  ylab("% of household income spent each month")+
+  labs(caption = "Source: ONS Family Spending Workbook 1 - detailed expenditure and trends (table 3.2E)")
+```
+
+Interestingly, using this approach, it could be argued that middle-income (5^th^ and 6^th^ decile households) are more greatly impacted by rising costs, as these groups have seen the biggest percentage-point increase in energy expenditure since 2019 (1.3% and 0.9% respectively). This sentiment was [echoed by former Chancellor Nadim Zahawi][4], though he did not state his basis for this claim.
+
+[4]: <https://www.bbc.co.uk/news/uk-politics-62695778>
+
+```{r, echo = FALSE}
+energy_3_yr_wide <- energy_3_yr %>%
+  pivot_wider(names_from = year, names_prefix = "pct_", values_from = percent) %>%
+  mutate(pct_point_diff = pct_2021 - pct_2019)
+
+ggplot(data = energy_3_yr_wide, aes(x = decile, y = pct_point_diff))+
+  geom_col(aes(fill = pct_point_diff >0))+
+  theme(legend.position="none", axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))+
+  ggtitle("%Changes in household income spent on energy from 2019 to 2021 by income decile")+
+  xlab("Income decile")+
+  ylab("% point difference")+
+  labs(caption = "Source: ONS Family Spending Workbook 1 - detailed expenditure and trends (table 3.2E)")
+
+```
+
+#### Affordability of energy bills
+
+It is clear that the cost of energy is rising, and is [set to rise further into 2023.][5]. This naturally prompts the question of whether price rises are affordable or not. To explore this further, data from the *July 2022 Opinions and Lifestyle Survey: Impact of increased cost of living on adults across Great Britain* was explored.
+
+As shown below, 49% of individuals in the lowest income band are reporting difficulties in paying their energy bills. In the second income band, this rises further to 51%. Across the higher income bands, this figure decreases - in the highest income band, those earning over £50,000, 18% of people report having difficulties in paying their energy bills, with 79% reporting that they find it easy to pay.
+
+[5]: <https://www.ofgem.gov.uk/publications/default-tariff-cap-level-1-october-2022-31-december-2022>
+
+```{r, echo = FALSE}
+col_survey <- read_xlsx("costofliving050822.xlsx", sheet = "3.7", skip = 13)
+
+bill_difficulty <- col_survey[8:13, c(1, 3:9)] %>%
+  pivot_longer(cols = 2:8, names_to = "income_band", values_to = "percentage") %>%
+  mutate(percentage = as.numeric(percentage),
+         income_band = factor(income_band, 
+                              levels = c("Up to £10,000 \r\n%", 
+                                         "£10,000 up to £15,000 \r\n%",
+                                         "£15,000 up to £20,000 \r\n%",
+                                         "£20,000 up to £30,000\r\n %",
+                                         "£30,000 up to £40,000\r\n %",
+                                         "£40,000 up to £50,000\r\n %",
+                                         "£50,000 or more\r\n%")),
+         response = factor(`Survey question and response options`,
+                           levels = c( "Prefer not to say", "Don't know","Very easy", "Somewhat easy", "Somewhat difficult", "Very difficult"))
+         )
+
+ggplot(data = bill_difficulty, aes(x = income_band, y = percentage, fill = response))+
+  geom_col()+
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))+
+  ggtitle("Response to question: How easy or difficult is it to afford your energy bills?
+")+
+  labs(caption = "Source: ONS July 2022 Opinions and Lifestyle Survey")+
+  xlab("Annual income")+
+  ylab("% of respondents")
+
+
+```
+
+Interestingly, when asked directly about increases to energy bills in the last month, 79% of individuals in the lowest income band reported an increase - all other income bands had a higher number of individuals reporting an increase, with an average of 84% across all income bands. Whilst this is only a small difference and increases in bills are being reported in high numbers across all income bands, this data suggests that fewer people in the lowest income band have seen an increase in the last month. 
+
+```{r, echo = FALSE}
+col_survey_inc <- read_xlsx("costofliving050822.xlsx", sheet = "1.7", skip = 12)
+
+increased_col <- col_survey_inc[7, c(1, 3:9)] %>%
+  pivot_longer(cols = 2:8, names_to = "income_band", values_to = "percentage") %>%
+  mutate(percentage = as.numeric(percentage),
+         income_band = factor(income_band, 
+                              levels = c("Up to £10,000 \r\n%", 
+                                         "£10,000 up to £15,000 \r\n%",
+                                         "£15,000 up to £20,000 \r\n%",
+                                         "£20,000 up to £30,000 \r\n%",
+                                         "£30,000 up to £40,000 \r\n%",
+                                         "£40,000 up to £50,000\r\n %",
+                                         "£50,000  or more\r\n%")),
+  )
+
+ggplot(data = increased_col, aes(x = income_band, y = percentage))+
+  geom_col()+
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))+
+  ggtitle("Response to question: Over the last month, for what reasons has your cost of living increased?")+
+  labs(caption = "Source: ONS July 2022 Opinions and Lifestyle Survey: Impact of increased cost of living on adults across Great Britain")+
+  xlab("Annual income")+
+  ylab("% of respondents")
+```
+
+#### Correlation between energy and housing costs
+
+To explore the relationship between income level and the wider cost of living, simple linear regression across income deciles can be used to determine the correlation between energy costs and other household expenditure, such as rent.
+
+```{r, echo=FALSE}
+netrent_pct <- expenditure_pct %>% 
+  filter(COPI == "4.1.3")%>%
+  select(-COPI) %>%
+  pivot_longer(cols = 2:12, names_to = "decile", values_to = "percent")%>%
+  mutate(percent = as.numeric(percent),
+         decile = factor(decile, levels = c("All_household", "Lowest_10", "Second_10", "Third_10", "Fourth_10", "Fifth_10", "Sixth_10", "Seventh_10", "Eighth_10", "Ninth_10", "Highest_10")))
+  
+rent_energy <- 
+  inner_join(filter(energy_pct, Commodity == "Electricity, gas and other fuels"),netrent_pct, by = "decile")
+
+lm <- lm(rent_energy$percent.y ~ rent_energy$percent.x)
+summary(lm)
+
+ggplot(rent_energy, aes(x = percent.x, y = percent.y))+
+  geom_point(aes(colour = decile))+
+  xlab("% of income spent on energy")+
+  ylab("% of income spent on rent")+
+  geom_smooth(method='lm', formula= y~x)+
+  geom_text(x = 4, y = 14, label = paste0("Adjusted R-squared = ",round(summary(lm)$adj.r.squared, 3)))
+
+```
+
+This simple linear model shows a positive correlation between energy costs and rental costs (adjusted *R*^2^ value of 0.5687). The p-value of 0.004441 indicates that this correlation is statistically significant. Therefore, it can be concluded that those spending more on energy are also spending more on rent across all income deciles.
+
+### Recommendations
+
+Based on the above analysis, it is clear that:
+
+1. Lower income households spend a greater proportion of their income on energy
+2. Middle-income households have seen the biggest increase in proportion of income spent on energy bills when comparing to 2019
+3. Around half of those earning £15,000 or less have reported having difficulty paying energy bills in 2022
+4. Those who spend a higher proportion of income on energy are also likely to spend more on rental costs.
+
+On the whole, I agree with ONS' assertion that lower income households will be more impacted by rising costs than higher income households, however, middle income households are seeing the biggest rise in terms of proportion of income spent on energy bills since 2019. 
+
+Therefore, I would suggest that mean-tested energy bill support is administered to all households, in order to provide targeted support to those who need it most. 
+
+Those who are struggling to pay their bills are likely to end up in debt to their energy providers - I would suggest an upper debt limit is imposed on energy suppliers to avoid individual customers building up insurmountable debt. 
+
+Given the link between higher spending on energy and higher spending on rent, I would also suggest a blanket rent freeze in the short-term as [already implemented in Scotland][7], to ensure that rising energy prices aren't compounded by rises in rent, leaving the lowest income households in an untenable financial situation. 
+
+[7]: <https://www.bbc.co.uk/news/uk-scotland-scotland-politics-62807578>
+
+### Further Work
+
+Further areas to explore the impact of energy price increases on lower income households could include:
+
+1. How those on pre-payment meters are impacted
+2. Regional variations, including urban vs rural 
+3. The relationship between energy price rises and inflation
+4. Multiple linear regression to explore the relationship between other household exependiture and energy costs.
+
+## Notes
+
+Thanks go to Thomas Wise for performing initial cleaning of COICOP data.
