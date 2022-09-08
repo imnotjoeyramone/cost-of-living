@@ -9,7 +9,6 @@ output:
 knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
 library(tidyverse)
 library(readxl)
-setwd("C:/Users/AT333597/My Drive/Data Science/Data Science Graduate Programme/mod-10 - Data Science for Policy/Cost of Living analysis")
 ```
 
 ## Background
